@@ -2,10 +2,11 @@ package orders
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
-	"ecom-api/internal/utils" // <-- Sesuaikan dengan path project Anda
+	"ecom-api/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,15 +22,27 @@ func NewHandler(service Service) *Handler {
 }
 
 func (h *Handler) PlaceOrder(c *gin.Context) {
+	userIDRaw, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	loggedInUserID, ok := userIDRaw.(int64)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user token data"})
+		return
+	}
+
 	var req CreateOrderRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
+			"error": "format request tidak valid",
 		})
 		return
 	}
-
+	req.CustomerID = loggedInUserID
 	order, err := h.service.PlaceOrder(
 		c.Request.Context(),
 		req,
@@ -50,8 +63,9 @@ func (h *Handler) PlaceOrder(c *gin.Context) {
 			return
 		}
 
+		log.Printf("[ERROR] PlaceOrder gagal untuk user %d: %v", loggedInUserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to create order",
+			"error": "gagal membuat pesanan, silakan coba lagi",
 		})
 		return
 	}
@@ -60,6 +74,18 @@ func (h *Handler) PlaceOrder(c *gin.Context) {
 }
 
 func (h *Handler) ListOrdersByCustomer(c *gin.Context) {
+	userIDRaw, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	loggedInUserID, ok := userIDRaw.(int64)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user token data"})
+		return
+	}
+
 	customerID, err := strconv.ParseInt(
 		c.Param("customer_id"),
 		10,
@@ -72,11 +98,15 @@ func (h *Handler) ListOrdersByCustomer(c *gin.Context) {
 		})
 		return
 	}
+	if customerID != loggedInUserID {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "anda tidak memiliki akses ke data pesanan pengguna lain",
+		})
+		return
+	}
 
-	// 1. Ambil meta paginasi dari query params
 	pagination := utils.GeneratePaginationFromRequest(c)
 
-	// 2. Teruskan pagination ke service
 	orders, err := h.service.ListOrdersByCustomer(
 		c.Request.Context(),
 		customerID,
@@ -84,8 +114,9 @@ func (h *Handler) ListOrdersByCustomer(c *gin.Context) {
 	)
 
 	if err != nil {
+		log.Printf("[ERROR] ListOrdersByCustomer gagal untuk user %d: %v", loggedInUserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "gagal mengambil data pesanan, silakan coba lagi",
 		})
 		return
 	}

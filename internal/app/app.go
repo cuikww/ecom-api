@@ -1,8 +1,13 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"ecom-api/internal/auth"
@@ -111,16 +116,39 @@ func Run() error {
 	)
 
 	// ==============================
-	// SERVER
+	// SERVER (GRACEFUL SHUTDOWN)
 	// ==============================
 
 	server := gin.Default()
-
 	router.Register(server)
 
-	log.Println("server running on :8080")
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: server,
+	}
 
-	return server.Run(":8080")
+	go func() {
+		log.Println("server running on :8080")
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	<-quit
+	log.Println("Menerima sinyal shutdown, mematikan server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server dipaksa mati karena timeout atau error: ", err)
+	}
+
+	log.Println("Server berhasil dimatikan secara aman (Graceful Shutdown)")
+	return nil
 }
 
 type missingEnvError struct {

@@ -8,7 +8,7 @@ type OrderItemRequest struct {
 }
 
 type CreateOrderRequest struct {
-	CustomerID int64              `json:"customerId" binding:"required"`
+	CustomerID int64              `json:"customerId"`
 	Items      []OrderItemRequest `json:"items" binding:"required,min=1,dive"`
 }
 
