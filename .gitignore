@@ -1,0 +1,62 @@
+# ==========================================
+# 1. Binaries (Hasil Build)
+# ==========================================
+# Abaikan file executable hasil build Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+# Abaikan nama binary aplikasi Anda (sesuaikan jika namanya beda)
+main
+ecom-api
+
+# ==========================================
+# 2. Environment Variables & Secrets
+# ==========================================
+# SANGAT PENTING: Jangan pernah push file .env ke Git!
+.env
+.env.*
+!.env.example # Kecuali .env.example (berisi template kosong) diperbolehkan
+
+# ==========================================
+# 3. Temporary Files & Live Reloading
+# ==========================================
+# Jika Anda menggunakan tool live-reload seperti 'Air' (sangat umum di Gin)
+tmp/
+/build/
+/dist/
+
+# ==========================================
+# 4. Dependency (Opsional, tergantung kebijakan tim)
+# ==========================================
+# Jika Anda menggunakan go mod vendor
+vendor/
+
+# ==========================================
+# 5. OS Specific
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==========================================
+# 6. IDE / Editor Folders
+# ==========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ==========================================
+# 7. Logs & Testing
+# ==========================================
+*.log
+coverage.out
+coverage.html
