@@ -17,6 +17,7 @@ import (
 	"ecom-api/internal/orders"
 	"ecom-api/internal/products"
 	"ecom-api/internal/users"
+	"ecom-api/internal/worker"
 
 	"github.com/gin-gonic/gin"
 )
@@ -66,6 +67,17 @@ func Run() error {
 	slog.Info("Redis terhubung")
 
 	// ==============================
+	// Worker
+	// ==============================
+
+	workerPool := worker.NewPool(5, 1000)
+
+	bgCtx, cancelBg := context.WithCancel(context.Background())
+	defer cancelBg()
+
+	workerPool.Start(bgCtx)
+
+	// ==============================
 	// JWT
 	// ==============================
 
@@ -107,9 +119,8 @@ func Run() error {
 		jwtService,
 	)
 
-	productService := products.NewService(db, rdb)
-
-	orderService := orders.NewService(db, rdb)
+	productService := products.NewService(db, rdb, workerPool)
+	orderService := orders.NewService(db, rdb, workerPool)
 
 	// ==============================
 	// HANDLERS
@@ -136,7 +147,6 @@ func Run() error {
 
 	gin.SetMode(gin.ReleaseMode)
 	server := gin.New()
-
 	router.Register(server)
 
 	srv := &http.Server{
@@ -157,13 +167,14 @@ func Run() error {
 	<-quit
 
 	slog.Info("Menerima sinyal shutdown, mematikan server...")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("Server dipaksa mati", slog.String("error", err.Error()))
-		return err
 	}
+
+	workerPool.Stop()
 
 	slog.Info("Server berhasil dimatikan secara aman")
 	return nil

@@ -9,6 +9,7 @@ import (
 type Order struct {
 	ID         int64       `gorm:"primaryKey;autoIncrement" json:"id"`
 	CustomerID int64       `gorm:"column:customer_id;not null" json:"customerId"`
+	Status     string      `gorm:"status;not null;default:'PENDING'" json:"status"`
 	CreatedAt  time.Time   `gorm:"column:created_at;not null" json:"createdAt"`
 	Items      []OrderItem `gorm:"foreignKey:OrderID" json:"items"`
 }

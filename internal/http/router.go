@@ -103,17 +103,29 @@ func (rt *Router) Register(r *gin.Engine) {
 		rt.productHandler.FindProductsByID,
 	)
 
-	protected.POST(
+	adminRoutes := protected.Group("/")
+	adminRoutes.Use(auth.RoleMiddleware(users.RoleAdmin))
+
+	adminRoutes.POST(
 		"/products",
 		rt.productHandler.CreateProduct,
 	)
 
-	protected.PATCH(
+	adminRoutes.PATCH(
 		"/products/:id",
 		rt.productHandler.UpdateProduct,
 	)
 
 	// Orders
+	adminRoutes.GET(
+		"/orders",
+		rt.orderHandler.ListAllOrders,
+	)
+	adminRoutes.PATCH(
+		"/orders/:id/status",
+		rt.orderHandler.UpdateOrderStatus,
+	)
+
 	protected.POST(
 		"/orders",
 		rt.orderHandler.PlaceOrder,

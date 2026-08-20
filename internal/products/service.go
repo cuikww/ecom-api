@@ -3,6 +3,7 @@ package products
 import (
 	"context"
 	"ecom-api/internal/utils"
+	"ecom-api/internal/worker"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,12 +24,13 @@ type Service interface {
 }
 
 type service struct {
-	db    *gorm.DB
-	redis *redis.Client
+	db         *gorm.DB
+	redis      *redis.Client
+	workerPool worker.Pool
 }
 
-func NewService(db *gorm.DB, rdb *redis.Client) Service {
-	return &service{db: db, redis: rdb}
+func NewService(db *gorm.DB, rdb *redis.Client, wp worker.Pool) Service {
+	return &service{db: db, redis: rdb, workerPool: wp}
 }
 
 func (s *service) ListProducts(ctx context.Context, p utils.Pagination) ([]Product, error) {
@@ -100,7 +102,10 @@ func (s *service) CreateProduct(ctx context.Context, p ProductParams) (Product, 
 		return Product{}, err
 	}
 
-	s.redis.Del(ctx, "products:all")
+	s.workerPool.Enqueue(func(bgCtx context.Context) error {
+		s.redis.Del(bgCtx, "products:all")
+		return nil
+	})
 
 	return product, nil
 }
@@ -134,9 +139,12 @@ func (s *service) UpdateProduct(ctx context.Context, p ProductParams) (Product, 
 		return Product{}, ErrProductNotFound
 	}
 
-	cacheKeySpecific := fmt.Sprintf("product:%d", p.ID)
-	cacheKeyAll := "products:all"
-	s.redis.Del(ctx, cacheKeySpecific, cacheKeyAll)
+	s.workerPool.Enqueue(func(bgCtx context.Context) error {
+		cacheKeySpecific := fmt.Sprintf("product:%d", p.ID)
+		cacheKeyAll := "products:all"
+		s.redis.Del(bgCtx, cacheKeySpecific, cacheKeyAll)
+		return nil
+	})
 
 	return product, nil
 }

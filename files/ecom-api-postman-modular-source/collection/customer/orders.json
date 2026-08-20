@@ -1,0 +1,166 @@
+{
+  "name": "Orders",
+  "description": "Sesuai orders.Handler — PlaceOrder & ListOrdersByCustomer, keduanya pakai loggedInUserID dari token (ada validasi IDOR di ListOrdersByCustomer).",
+  "item": [
+    {
+      "name": "Place Order",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"productId\": {{productId}},\n      \"quantity\": 2\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "customerId diisi otomatis oleh server dari token (req.CustomerID = loggedInUserID), jadi tidak perlu dikirim di body."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Order placed (200/201)', function () {",
+              "    pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "",
+              "if ([200, 201].includes(pm.response.code)) {",
+              "    const body = pm.response.json();",
+              "    const data = body.data || body;",
+              "    const id = data.id || data.ID || data.orderId;",
+              "    if (id) {",
+              "        pm.environment.set('orderId', id);",
+              "        console.log('orderId tersimpan otomatis: ' + id);",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Place Order - Produk Tidak Ditemukan",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"productId\": 999999999,\n      \"quantity\": 1\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Negative test: productId tidak ada -> ErrorProductNotFound -> 404."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Produk tidak ditemukan -> 404', function () {",
+              "    pm.response.to.have.status(404);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Place Order - Stok Tidak Cukup",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"productId\": {{productId}},\n      \"quantity\": 999999\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Negative test: quantity melebihi stok -> ErrorProductNoStock -> 409."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Stok tidak cukup -> 409', function () {",
+              "    pm.response.to.have.status(409);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "List My Orders",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/orders/customer/{{customerId}}?page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders", "customer", "{{customerId}}"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "List Orders By Customer - IDOR Check (harus 403)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/orders/customer/999999",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders", "customer", "999999"]
+        },
+        "description": "Negative test penting: coba akses data customer lain -> harus 403 (validasi IDOR di handler)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Akses data customer lain -> 403 (IDOR terlindungi)', function () {",
+              "    pm.response.to.have.status(403);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

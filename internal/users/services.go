@@ -49,14 +49,14 @@ func (s *service) LoginUser(ctx context.Context, p LoginUserParam) (LoginRespons
 		return LoginResponse{}, ErrInvalidCredentials
 	}
 	if err != nil {
-		return LoginResponse{}, err // error DB asli tetap naik, tidak ditelan
+		return LoginResponse{}, err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(p.Password)); err != nil {
 		return LoginResponse{}, ErrInvalidCredentials
 	}
 
-	accessToken, err := s.jwtService.GenerateToken(int64(user.ID))
+	accessToken, err := s.jwtService.GenerateToken(int64(user.ID), user.Role)
 	if err != nil {
 		return LoginResponse{}, err
 	}

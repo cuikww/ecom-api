@@ -1,0 +1,64 @@
+{
+  "info": {
+    "name": "Ecom API",
+    "description": "Collection modular untuk Ecom API (Public, Customer, Admin).\n\n📦 STRUKTUR MODULAR\nFile ini (collection.manifest.json) adalah file INDUK. Ia tidak berisi request sama sekali — cuma daftar folder role & file fitur mana yang harus digabung oleh `build.js` menjadi satu file `dist/Ecom-API.postman_collection.json` yang kamu import ke Postman.\n\nCara pakai:\n1. Edit/tambah file fitur di collection/<role>/<fitur>.json\n2. Daftarkan file itu di 'roles' pada manifest ini (kalau fitur baru)\n3. Jalankan: node build.js\n4. Import dist/Ecom-API.postman_collection.json ke Postman (re-import untuk update)\n\nAlur pemakaian di Postman:\n1. Public > Register User (opsional)\n2. Public > Login (Customer) atau Public > Login (Admin) — accessToken & role otomatis tersimpan\n3. Folder Customer & Admin otomatis pakai accessToken sesuai role login terakhir\n4. productId, customerId, orderId ikut ke-set otomatis dari response berantai",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": { "type": "text/javascript", "exec": [""] }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global check untuk SEMUA request di collection ini",
+          "pm.test('Status code is not 5xx', function () {",
+          "    pm.expect(pm.response.code).to.be.below(500);",
+          "});",
+          "",
+          "pm.test('Response time reasonable (<3000ms)', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" }
+  ],
+  "roles": [
+    {
+      "folder": "Public",
+      "description": "Endpoint yang tidak butuh login: health check, register, login (customer & admin), lihat produk.",
+      "auth": { "type": "noauth" },
+      "features": [
+        "collection/public/health.json",
+        "collection/public/auth.json",
+        "collection/public/products.json"
+      ]
+    },
+    {
+      "folder": "Customer",
+      "description": "Endpoint yang butuh login sebagai customer (Bearer token dari Public > Login (Customer)).",
+      "features": [
+        "collection/customer/profile.json",
+        "collection/customer/orders.json"
+      ]
+    },
+    {
+      "folder": "Admin",
+      "description": "Endpoint yang butuh login sebagai admin (Bearer token dari Public > Login (Admin)). Kelola produk & semua pesanan.",
+      "features": [
+        "collection/admin/products.json",
+        "collection/admin/orders.json"
+      ]
+    }
+  ]
+}

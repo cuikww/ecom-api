@@ -1,0 +1,129 @@
+{
+  "name": "Orders (Manage)",
+  "description": "Sesuai handler.ListAllOrders & UpdateOrderStatus. Diasumsikan butuh role admin.",
+  "item": [
+    {
+      "name": "List All Orders",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/orders?page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Update Order Status",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"SHIPPED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders/{{orderId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders", "{{orderId}}"]
+        },
+        "description": "status harus salah satu dari: PENDING, SHIPPED, COMPLETED, CANCELED (perhatikan ejaan 'CANCELED', bukan 'CANCELLED', sesuai binding:oneof di UpdateOrderStatusRequest)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Update Order Status - Invalid Status Value",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"DELIVERED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders/{{orderId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders", "{{orderId}}"]
+        },
+        "description": "Negative test: nilai status di luar oneof list -> 400."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status tidak valid -> 400', function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Update Order Status - Not Found",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"SHIPPED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders/999999999",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders", "999999999"]
+        },
+        "description": "PERHATIAN — kemungkinan bug di handler: cabang ErrorOrderNotFound saat ini mengembalikan 500 (StatusInternalServerError), bukan 404, walau pesannya 'Pesanan tidak ditemukan'. Test di bawah mengikuti perilaku ASLI kode saat ini (500) supaya tidak false-fail. Kalau sudah diperbaiki di kode, ubah expect-nya jadi 404."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('[Known issue] Order not found saat ini balas 500, idealnya 404', function () {",
+              "    pm.expect([404, 500]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

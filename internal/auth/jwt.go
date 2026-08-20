@@ -30,12 +30,14 @@ func NewJWTService(
 }
 
 type Claims struct {
+	Role string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func (j *JWTService) GenerateToken(userID int64) (string, error) {
+func (j *JWTService) GenerateToken(userID int64, role string) (string, error) {
 	now := time.Now()
 	claims := Claims{
+		Role: role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   fmt.Sprintf("%d", userID),
 			Issuer:    j.issuer,

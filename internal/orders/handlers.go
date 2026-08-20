@@ -89,3 +89,38 @@ func (h *Handler) ListOrdersByCustomer(c *gin.Context) {
 
 	response.Success(c, http.StatusOK, orders, pagination)
 }
+
+func (h *Handler) ListAllOrders(c *gin.Context) {
+	pagination := utils.GeneratePaginationFromRequest(c)
+
+	orders, err := h.service.ListAllOrders(c.Request.Context(), pagination)
+	if err != nil {
+		slog.Error("ListAllOrders gagal", slog.String("error", err.Error()))
+		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Error server internal")
+		return
+	}
+	response.Success(c, http.StatusOK, orders, pagination)
+}
+
+func (h *Handler) UpdateOrderStatus(c *gin.Context) {
+	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrInvalidRequest, "Format ID Pesanan tidak valid")
+		return
+	}
+	var req UpdateOrderStatusRequest
+	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrInvalidRequest, "Format status pesanan tidak valid (PENDING, PAID, SHIPPED, COMPLETED, CANCELLED)")
+		return
+	}
+	order, err := h.service.UpdateOrderStatus(c.Request.Context(), orderID, req.Status)
+	if err != nil {
+		if errors.Is(err, ErrorOrderNotFound) {
+			response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Pesanan tidak ditemukan")
+			return
+		}
+		slog.Error("UpdateOrderStatus gagal", slog.Int64("order_id", orderID), slog.String("error", err.Error()))
+		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Gagal memperbarui status pesanan")
+	}
+	response.Success(c, http.StatusOK, order, nil)
+}

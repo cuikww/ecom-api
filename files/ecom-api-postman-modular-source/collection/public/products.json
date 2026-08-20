@@ -1,0 +1,102 @@
+{
+  "name": "Products (Read)",
+  "description": "Endpoint produk yang read-only dan tidak butuh login (sesuai handler.ListProducts & FindProductsByID, tidak ada auth.GetUserIDHelper di dalamnya).",
+  "item": [
+    {
+      "name": "List Products",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products?page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["products"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    const data = body.data || body;",
+              "    if (Array.isArray(data) && data.length > 0) {",
+              "        const first = data[0];",
+              "        const id = first.id || first.ID;",
+              "        if (id) pm.environment.set('productId', id);",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Find Product By ID",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products/{{productId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{productId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200 atau 404', function () {",
+              "    pm.expect([200, 404]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Find Product By ID - Invalid ID format",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products/abc",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "abc"]
+        },
+        "description": "Negative test: ID bukan angka harus balas 400 (ErrInvalidRequest)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Format ID invalid -> 400', function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

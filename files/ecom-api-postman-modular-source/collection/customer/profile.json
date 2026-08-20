@@ -1,0 +1,91 @@
+{
+  "name": "Profile",
+  "description": "Sesuai users.Handler.GetProfile & UpdateProfile — pakai loggedInUserID dari token, jadi tidak perlu kirim ID di URL.",
+  "item": [
+    {
+      "name": "Get My Profile",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/users/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "me"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Update My Profile",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"John Doe Updated\",\n  \"phone\": \"081234567890\",\n  \"address\": \"Jl. Contoh No. 123, Jakarta\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/users/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "me"]
+        },
+        "description": "fullName (3-100 char), phone (10-15 char), address (min 10 char) — semua wajib sesuai binding tag."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Get My Profile - No Token",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/users/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "me"]
+        },
+        "description": "Negative test: tanpa token harus 401."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Tanpa token -> 401', function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

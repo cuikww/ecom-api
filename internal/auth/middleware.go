@@ -56,6 +56,41 @@ func AuthMiddleware(jwtService *JWTService) gin.HandlerFunc {
 		}
 
 		c.Set("userID", userID)
+		c.Set("userRole", claims.Role)
+		c.Next()
+	}
+}
+
+func RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userRoleRaw, exists := c.Get("userRole")
+		if !exists {
+			slog.Warn("Akses ditolak", slog.String("reason", "Role tidak ditemukan di context"))
+			response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "Sesi tidak valid")
+			return
+		}
+		userRole, ok := userRoleRaw.(string)
+		if !ok {
+			response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Kesalahan sistem saat menerima otorisasi")
+		}
+		isAllowed := false
+
+		for _, role := range allowedRoles {
+			if userRole == role {
+				isAllowed = true
+				break
+			}
+		}
+		if !isAllowed {
+			slog.Warn("Otorisasi gagal",
+				slog.String("user_role", userRole),
+				slog.String("required_roles", strings.Join(allowedRoles, ",")),
+				slog.String("path", c.Request.URL.Path),
+			)
+			response.Error(c, http.StatusForbidden, "ERR_FORBIDDEN", "Anda tidak memiliki akses")
+			return
+		}
+
 		c.Next()
 	}
 }

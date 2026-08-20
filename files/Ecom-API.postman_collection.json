@@ -1,0 +1,1084 @@
+{
+  "info": {
+    "name": "Ecom API",
+    "description": "Collection modular untuk Ecom API (Public, Customer, Admin).\n\n📦 STRUKTUR MODULAR\nFile ini (collection.manifest.json) adalah file INDUK. Ia tidak berisi request sama sekali — cuma daftar folder role & file fitur mana yang harus digabung oleh `build.js` menjadi satu file `dist/Ecom-API.postman_collection.json` yang kamu import ke Postman.\n\nCara pakai:\n1. Edit/tambah file fitur di collection/<role>/<fitur>.json\n2. Daftarkan file itu di 'roles' pada manifest ini (kalau fitur baru)\n3. Jalankan: node build.js\n4. Import dist/Ecom-API.postman_collection.json ke Postman (re-import untuk update)\n\nAlur pemakaian di Postman:\n1. Public > Register User (opsional)\n2. Public > Login (Customer) atau Public > Login (Admin) — accessToken & role otomatis tersimpan\n3. Folder Customer & Admin otomatis pakai accessToken sesuai role login terakhir\n4. productId, customerId, orderId ikut ke-set otomatis dari response berantai",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Health",
+          "item": [
+            {
+              "name": "Health Check",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Server sehat (200)', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            }
+          ],
+          "description": "Cek server hidup atau tidak."
+        },
+        {
+          "name": "Auth",
+          "item": [
+            {
+              "name": "Register User",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fullName\": \"John Doe\",\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "users"
+                  ]
+                },
+                "description": "Field wajib: fullName, email, password (min 6 karakter)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('User created (200/201)', function () {",
+                      "    pm.expect([200, 201]).to.include(pm.response.code);",
+                      "});",
+                      "",
+                      "if ([200, 201].includes(pm.response.code)) {",
+                      "    const body = pm.response.json();",
+                      "    const data = body.data || body;",
+                      "    if (data.id) pm.environment.set('userId', data.id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Login (Customer)",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "users",
+                    "login"
+                  ]
+                },
+                "description": "Login sebagai customer. accessToken otomatis dipakai oleh folder 'Customer'."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Login success (200)', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "if (pm.response.code === 200) {",
+                      "    const body = pm.response.json();",
+                      "    const data = body.data || body;",
+                      "    if (data.accessToken) {",
+                      "        pm.environment.set('accessToken', data.accessToken);",
+                      "        pm.environment.set('activeRole', 'customer');",
+                      "        console.log('accessToken (customer) tersimpan otomatis.');",
+                      "    }",
+                      "    if (data.user && data.user.id) {",
+                      "        pm.environment.set('customerId', data.user.id);",
+                      "        pm.environment.set('userId', data.user.id);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Login (Admin)",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "users",
+                    "login"
+                  ]
+                },
+                "description": "Login sebagai admin (akun admin harus sudah ada/di-seed di DB). accessToken otomatis dipakai oleh folder 'Admin'."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Login admin success (200)', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "if (pm.response.code === 200) {",
+                      "    const body = pm.response.json();",
+                      "    const data = body.data || body;",
+                      "    if (data.accessToken) {",
+                      "        pm.environment.set('accessToken', data.accessToken);",
+                      "        pm.environment.set('activeRole', 'admin');",
+                      "        console.log('accessToken (admin) tersimpan otomatis.');",
+                      "    }",
+                      "    if (data.user && data.user.id) {",
+                      "        pm.environment.set('adminId', data.user.id);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            }
+          ],
+          "description": "Register & Login. Register hanya membuat user dengan role 'customer' (lihat users.CreateUserParam — tidak ada field role). Untuk akun admin, pakai kredensial yang sudah di-seed di DB, lalu login lewat 'Login (Admin)'."
+        },
+        {
+          "name": "Products (Read)",
+          "item": [
+            {
+              "name": "List Products",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/products?page=1&limit=10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "if (pm.response.code === 200) {",
+                      "    const body = pm.response.json();",
+                      "    const data = body.data || body;",
+                      "    if (Array.isArray(data) && data.length > 0) {",
+                      "        const first = data[0];",
+                      "        const id = first.id || first.ID;",
+                      "        if (id) pm.environment.set('productId', id);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Find Product By ID",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/products/{{productId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products",
+                    "{{productId}}"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200 atau 404', function () {",
+                      "    pm.expect([200, 404]).to.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Find Product By ID - Invalid ID format",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/products/abc",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products",
+                    "abc"
+                  ]
+                },
+                "description": "Negative test: ID bukan angka harus balas 400 (ErrInvalidRequest)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Format ID invalid -> 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            }
+          ],
+          "description": "Endpoint produk yang read-only dan tidak butuh login (sesuai handler.ListProducts & FindProductsByID, tidak ada auth.GetUserIDHelper di dalamnya)."
+        }
+      ],
+      "description": "Endpoint yang tidak butuh login: health check, register, login (customer & admin), lihat produk.",
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "Customer",
+      "item": [
+        {
+          "name": "Profile",
+          "item": [
+            {
+              "name": "Get My Profile",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "users",
+                    "me"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Update My Profile",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fullName\": \"John Doe Updated\",\n  \"phone\": \"081234567890\",\n  \"address\": \"Jl. Contoh No. 123, Jakarta\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "users",
+                    "me"
+                  ]
+                },
+                "description": "fullName (3-100 char), phone (10-15 char), address (min 10 char) — semua wajib sesuai binding tag."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Get My Profile - No Token",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "users",
+                    "me"
+                  ]
+                },
+                "description": "Negative test: tanpa token harus 401."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Tanpa token -> 401', function () {",
+                      "    pm.response.to.have.status(401);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            }
+          ],
+          "description": "Sesuai users.Handler.GetProfile & UpdateProfile — pakai loggedInUserID dari token, jadi tidak perlu kirim ID di URL."
+        },
+        {
+          "name": "Orders",
+          "item": [
+            {
+              "name": "Place Order",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"items\": [\n    {\n      \"productId\": {{productId}},\n      \"quantity\": 2\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "description": "customerId diisi otomatis oleh server dari token (req.CustomerID = loggedInUserID), jadi tidak perlu dikirim di body."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Order placed (200/201)', function () {",
+                      "    pm.expect([200, 201]).to.include(pm.response.code);",
+                      "});",
+                      "",
+                      "if ([200, 201].includes(pm.response.code)) {",
+                      "    const body = pm.response.json();",
+                      "    const data = body.data || body;",
+                      "    const id = data.id || data.ID || data.orderId;",
+                      "    if (id) {",
+                      "        pm.environment.set('orderId', id);",
+                      "        console.log('orderId tersimpan otomatis: ' + id);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Place Order - Produk Tidak Ditemukan",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"items\": [\n    {\n      \"productId\": 999999999,\n      \"quantity\": 1\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "description": "Negative test: productId tidak ada -> ErrorProductNotFound -> 404."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Produk tidak ditemukan -> 404', function () {",
+                      "    pm.response.to.have.status(404);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Place Order - Stok Tidak Cukup",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"items\": [\n    {\n      \"productId\": {{productId}},\n      \"quantity\": 999999\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "description": "Negative test: quantity melebihi stok -> ErrorProductNoStock -> 409."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Stok tidak cukup -> 409', function () {",
+                      "    pm.response.to.have.status(409);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "List My Orders",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/customer/{{customerId}}?page=1&limit=10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "customer",
+                    "{{customerId}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "List Orders By Customer - IDOR Check (harus 403)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/customer/999999",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "customer",
+                    "999999"
+                  ]
+                },
+                "description": "Negative test penting: coba akses data customer lain -> harus 403 (validasi IDOR di handler)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Akses data customer lain -> 403 (IDOR terlindungi)', function () {",
+                      "    pm.response.to.have.status(403);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            }
+          ],
+          "description": "Sesuai orders.Handler — PlaceOrder & ListOrdersByCustomer, keduanya pakai loggedInUserID dari token (ada validasi IDOR di ListOrdersByCustomer)."
+        }
+      ],
+      "description": "Endpoint yang butuh login sebagai customer (Bearer token dari Public > Login (Customer))."
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Products (Manage)",
+          "item": [
+            {
+              "name": "Create Product",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_name\": \"Sample Product\",\n  \"price_in_cents\": 150000,\n  \"quantity\": 20\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/products",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products"
+                  ]
+                },
+                "description": "Field: product_name, price_in_cents, quantity (semua pointer di ProductParams, tapi wajib diisi untuk create)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Product created (200/201)', function () {",
+                      "    pm.expect([200, 201]).to.include(pm.response.code);",
+                      "});",
+                      "",
+                      "if ([200, 201].includes(pm.response.code)) {",
+                      "    const body = pm.response.json();",
+                      "    const data = body.data || body;",
+                      "    const id = data.id || data.ID;",
+                      "    if (id) {",
+                      "        pm.environment.set('productId', id);",
+                      "        console.log('productId tersimpan otomatis: ' + id);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Update Product",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_name\": \"Updated Product Name\",\n  \"price_in_cents\": 175000,\n  \"quantity\": 15\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/products/{{productId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products",
+                    "{{productId}}"
+                  ]
+                },
+                "description": "Semua field opsional (pointer), kirim hanya field yang mau diubah — partial update."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Update Product - Not Found",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_name\": \"Ghost Product\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/products/999999999",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products",
+                    "999999999"
+                  ]
+                },
+                "description": "Negative test: update produk yang tidak ada -> ErrProductNotFound -> 404."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Produk tidak ditemukan -> 404', function () {",
+                      "    pm.response.to.have.status(404);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Create Product - No Token (harus 401)",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_name\": \"Should Fail\",\n  \"price_in_cents\": 1000,\n  \"quantity\": 1\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/products",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "products"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Tanpa token -> 401', function () {",
+                      "    pm.response.to.have.status(401);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            }
+          ],
+          "description": "Sesuai handler.CreateProduct & UpdateProduct. Diasumsikan butuh role admin (silakan sesuaikan folder-level auth kalau ternyata endpoint ini dibuka untuk role lain juga)."
+        },
+        {
+          "name": "Orders (Manage)",
+          "item": [
+            {
+              "name": "List All Orders",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders?page=1&limit=10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Update Order Status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"SHIPPED\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "status harus salah satu dari: PENDING, SHIPPED, COMPLETED, CANCELED (perhatikan ejaan 'CANCELED', bukan 'CANCELLED', sesuai binding:oneof di UpdateOrderStatusRequest)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Update Order Status - Invalid Status Value",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"DELIVERED\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "Negative test: nilai status di luar oneof list -> 400."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status tidak valid -> 400', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Update Order Status - Not Found",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"SHIPPED\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders/999999999",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "999999999"
+                  ]
+                },
+                "description": "PERHATIAN — kemungkinan bug di handler: cabang ErrorOrderNotFound saat ini mengembalikan 500 (StatusInternalServerError), bukan 404, walau pesannya 'Pesanan tidak ditemukan'. Test di bawah mengikuti perilaku ASLI kode saat ini (500) supaya tidak false-fail. Kalau sudah diperbaiki di kode, ubah expect-nya jadi 404."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('[Known issue] Order not found saat ini balas 500, idealnya 404', function () {",
+                      "    pm.expect([404, 500]).to.include(pm.response.code);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            }
+          ],
+          "description": "Sesuai handler.ListAllOrders & UpdateOrderStatus. Diasumsikan butuh role admin."
+        }
+      ],
+      "description": "Endpoint yang butuh login sebagai admin (Bearer token dari Public > Login (Admin)). Kelola produk & semua pesanan."
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global check untuk SEMUA request di collection ini",
+          "pm.test('Status code is not 5xx', function () {",
+          "    pm.expect(pm.response.code).to.be.below(500);",
+          "});",
+          "",
+          "pm.test('Response time reasonable (<3000ms)', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ]
+}

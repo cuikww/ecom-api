@@ -22,6 +22,11 @@ type OrderItemDetail struct {
 type OrderResponse struct {
 	OrderID    int64             `json:"orderId"`
 	CustomerID int64             `json:"customerId"`
+	Status     string            `json:"status"`
 	CreatedAt  time.Time         `json:"createdAt"`
 	Items      []OrderItemDetail `json:"items"`
+}
+
+type UpdateOrderStatusRequest struct {
+	Status string `json:"status" binding:"required,oneof=PENDING SHIPPED COMPLETED CANCELED"`
 }
