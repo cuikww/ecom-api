@@ -4,10 +4,33 @@ import (
 	"ecom-api/internal/auth"
 	"ecom-api/internal/orders"
 	"ecom-api/internal/products"
+	"ecom-api/internal/response"
 	"ecom-api/internal/users"
+	"log/slog"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+func RequestLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+
+		c.Next() // Proses request ke handler
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+
+		slog.Info("HTTP Request",
+			slog.String("method", c.Request.Method),
+			slog.String("path", path),
+			slog.Int("status", status),
+			slog.String("latency", latency.String()),
+			slog.String("ip", c.ClientIP()),
+		)
+	}
+}
 
 type Router struct {
 	userHandler    *users.Handler
@@ -31,6 +54,7 @@ func NewRouter(
 }
 
 func (rt *Router) Register(r *gin.Engine) {
+	r.Use(RequestLogger(), gin.Recovery())
 
 	// ==================================
 	// PUBLIC
@@ -47,9 +71,7 @@ func (rt *Router) Register(r *gin.Engine) {
 	)
 
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "All Good! Yeaaay",
-		})
+		response.Success(c, 200, gin.H{"status": "API is healthy"}, nil)
 	})
 
 	// ==================================
@@ -59,6 +81,15 @@ func (rt *Router) Register(r *gin.Engine) {
 	protected := r.Group("/")
 	protected.Use(
 		auth.AuthMiddleware(rt.jwtService),
+	)
+	//User
+	protected.GET(
+		"/users",
+		rt.userHandler.GetProfile,
+	)
+	protected.PATCH(
+		"/users",
+		rt.userHandler.UpdateProfile,
 	)
 
 	// Products

@@ -10,11 +10,16 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrInvalidCredentials = errors.New("email atau password salah")
+var (
+	ErrInvalidCredentials = errors.New("email atau password salah")
+	ErrUserNotFound       = errors.New("User not found")
+)
 
 type Service interface {
 	CreateUser(ctx context.Context, p CreateUserParam) (User, error)
 	LoginUser(ctx context.Context, p LoginUserParam) (LoginResponse, error)
+	GetProfile(ctx context.Context, userID int64) (UserProfileResponse, error)
+	UpdateProfile(ctx context.Context, userID int64, req UpdateProfileRequest) (UserProfileResponse, error)
 }
 
 type service struct {
@@ -56,4 +61,43 @@ func (s *service) LoginUser(ctx context.Context, p LoginUserParam) (LoginRespons
 		return LoginResponse{}, err
 	}
 	return LoginResponse{User: user, AccessToken: accessToken}, nil
+}
+
+func (s *service) GetProfile(ctx context.Context, userID int64) (UserProfileResponse, error) {
+	var user User
+	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return UserProfileResponse{}, ErrUserNotFound
+		}
+		return UserProfileResponse{}, err
+	}
+	return toProfileResponse(user), nil
+}
+func (s *service) UpdateProfile(ctx context.Context, userID int64, req UpdateProfileRequest) (UserProfileResponse, error) {
+	var user User
+	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return UserProfileResponse{}, ErrUserNotFound
+		}
+		return UserProfileResponse{}, err
+	}
+	user.FullName = req.FullName
+	user.Phone = req.Phone
+	user.Address = req.Address
+
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return UserProfileResponse{}, err
+	}
+	return toProfileResponse(user), nil
+}
+
+func toProfileResponse(u User) UserProfileResponse {
+	return UserProfileResponse{
+		ID:        int64(u.ID),
+		FullName:  u.FullName,
+		Email:     u.Email,
+		Phone:     u.Phone,
+		Address:   u.Address,
+		CreatedAt: u.CreatedAt,
+	}
 }

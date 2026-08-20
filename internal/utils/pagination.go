@@ -12,7 +12,7 @@ type Pagination struct {
 }
 
 func GeneratePaginationFromRequest(c *gin.Context) Pagination {
-	limit := 10 // default limit
+	limit := 20 // default limit
 	page := 1   // default page
 
 	queryLimit := c.Query("limit")

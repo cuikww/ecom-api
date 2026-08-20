@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +13,7 @@ import (
 	"ecom-api/internal/auth"
 	"ecom-api/internal/database"
 	httpRouter "ecom-api/internal/http"
+	"ecom-api/internal/logger"
 	"ecom-api/internal/orders"
 	"ecom-api/internal/products"
 	"ecom-api/internal/users"
@@ -21,22 +22,35 @@ import (
 )
 
 func Run() error {
+	logger.InitLogger()
+	slog.Info("Memulai aplikasi e-commerce API...")
+
 	// ==============================
 	// DATABASE
 	// ==============================
-
 	dsn := os.Getenv("GOOSE_DBSTRING")
-
 	if dsn == "" {
 		dsn = "host=localhost user=postgres password=postgres dbname=ecom port=5432 sslmode=disable"
 	}
 
 	db, err := database.Connect(dsn)
 	if err != nil {
+		slog.Error("Gagal koneksi database", slog.String("error", err.Error()))
 		return err
 	}
+	slog.Info("Database PostgreSQL terhubung")
 
-	log.Println("database connected")
+	err = db.AutoMigrate(
+		&users.User{},
+		&products.Product{},
+		&orders.Order{},
+		&orders.OrderItem{},
+	)
+	if err != nil {
+		slog.Error("Gagal migrate database", slog.String("error", err.Error()))
+		return err
+	}
+	slog.Info("Database schema synced successfully") // Diganti menggunakan slog
 
 	redisDSN := os.Getenv("REDIS_URL")
 	if redisDSN == "" {
@@ -45,10 +59,11 @@ func Run() error {
 
 	rdb, err := database.ConnectRedis(redisDSN)
 	if err != nil {
+		slog.Error("Gagal koneksi Redis", slog.String("error", err.Error()))
 		return err
 	}
 	defer rdb.Close()
-	log.Println("redis connected")
+	slog.Info("Redis terhubung")
 
 	// ==============================
 	// JWT
@@ -119,7 +134,9 @@ func Run() error {
 	// SERVER (GRACEFUL SHUTDOWN)
 	// ==============================
 
-	server := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
+	server := gin.New()
+
 	router.Register(server)
 
 	srv := &http.Server{
@@ -128,26 +145,27 @@ func Run() error {
 	}
 
 	go func() {
-		log.Println("server running on :8080")
+		slog.Info("Server berjalan", slog.String("port", "8080"))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("listen: %s\n", err)
+			slog.Error("Server gagal berjalan", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
 	<-quit
-	log.Println("Menerima sinyal shutdown, mematikan server...")
 
+	slog.Info("Menerima sinyal shutdown, mematikan server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server dipaksa mati karena timeout atau error: ", err)
+		slog.Error("Server dipaksa mati", slog.String("error", err.Error()))
+		return err
 	}
 
-	log.Println("Server berhasil dimatikan secara aman (Graceful Shutdown)")
+	slog.Info("Server berhasil dimatikan secara aman")
 	return nil
 }
 

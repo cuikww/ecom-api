@@ -2,10 +2,12 @@ package orders
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
+	"ecom-api/internal/auth"
+	"ecom-api/internal/response"
 	"ecom-api/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -22,107 +24,68 @@ func NewHandler(service Service) *Handler {
 }
 
 func (h *Handler) PlaceOrder(c *gin.Context) {
-	userIDRaw, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	loggedInUserID, ok := userIDRaw.(int64)
+	loggedInUserID, ok := auth.GetUserIDHelper(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user token data"})
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "Sesi tidak valid atau telah berakhir")
 		return
 	}
 
 	var req CreateOrderRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "format request tidak valid",
-		})
+		response.Error(c, http.StatusBadRequest, response.ErrInvalidRequest, "Format data pesanan tidak valid")
 		return
 	}
-	req.CustomerID = loggedInUserID
-	order, err := h.service.PlaceOrder(
-		c.Request.Context(),
-		req,
-	)
 
+	req.CustomerID = loggedInUserID
+
+	order, err := h.service.PlaceOrder(c.Request.Context(), req)
 	if err != nil {
+		slog.Error("PlaceOrder gagal", slog.Int64("user_id", loggedInUserID), slog.String("error", err.Error()))
+
 		if errors.Is(err, ErrorProductNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "product not found",
-			})
+			response.Error(c, http.StatusNotFound, response.ErrNotFound, "Beberapa produk tidak ditemukan")
 			return
 		}
 
 		if errors.Is(err, ErrorProductNoStock) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error": "product has insufficient stock",
-			})
+			response.Error(c, http.StatusConflict, response.ErrConflict, "Stok produk tidak mencukupi untuk pesanan ini")
 			return
 		}
 
-		log.Printf("[ERROR] PlaceOrder gagal untuk user %d: %v", loggedInUserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "gagal membuat pesanan, silakan coba lagi",
-		})
+		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Gagal membuat pesanan, silakan coba lagi")
 		return
 	}
 
-	c.JSON(http.StatusCreated, order)
+	response.Success(c, http.StatusCreated, order, nil)
 }
 
 func (h *Handler) ListOrdersByCustomer(c *gin.Context) {
-	userIDRaw, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	loggedInUserID, ok := userIDRaw.(int64)
+	loggedInUserID, ok := auth.GetUserIDHelper(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user token data"})
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "Sesi tidak valid atau telah berakhir")
 		return
 	}
 
-	customerID, err := strconv.ParseInt(
-		c.Param("customer_id"),
-		10,
-		64,
-	)
-
+	customerID, err := strconv.ParseInt(c.Param("customer_id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid customer id",
-		})
+		response.Error(c, http.StatusBadRequest, response.ErrInvalidRequest, "Format ID Customer tidak valid")
 		return
 	}
+
+	// Validasi IDOR
 	if customerID != loggedInUserID {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "anda tidak memiliki akses ke data pesanan pengguna lain",
-		})
+		response.Error(c, http.StatusForbidden, "ERR_FORBIDDEN", "Anda tidak memiliki akses ke data pesanan pengguna lain")
 		return
 	}
 
 	pagination := utils.GeneratePaginationFromRequest(c)
 
-	orders, err := h.service.ListOrdersByCustomer(
-		c.Request.Context(),
-		customerID,
-		pagination,
-	)
-
+	orders, err := h.service.ListOrdersByCustomer(c.Request.Context(), customerID, pagination)
 	if err != nil {
-		log.Printf("[ERROR] ListOrdersByCustomer gagal untuk user %d: %v", loggedInUserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "gagal mengambil data pesanan, silakan coba lagi",
-		})
+		slog.Error("ListOrdersByCustomer gagal", slog.Int64("user_id", loggedInUserID), slog.String("error", err.Error()))
+		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Gagal mengambil data pesanan")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"meta": pagination,
-		"data": orders,
-	})
+	response.Success(c, http.StatusOK, orders, pagination)
 }
