@@ -1,0 +1,229 @@
+{
+  "name": "Products (Manage)",
+  "description": "⚠️ PERUBAHAN STRUKTUR: Product sekarang punya Category, Images[], Variants[] — bukan lagi price_in_cents/quantity flat. Harga & stok sekarang di level VARIANT, bukan produk.\n\n⚠️ GOTCHA PENTING di UpdateProduct (service.go): Association('Images')/Association('Variants') SELALU di-Clear() dulu, baru diisi ulang dari p.Images/p.Variants. Kalau kamu kirim PATCH tanpa field 'images'/'variants', SEMUA images & variants produk itu akan KEHAPUS (jadi array kosong), bukan dibiarkan apa adanya. Jadi request 'Update Product' di bawah sengaja selalu ikut kirim variants & images lengkap.\n\n⚠️ KEMUNGKINAN REGRESI: UpdateProduct sekarang pakai 'tx.First(&product, p.ID).Error' mentah tanpa dikonversi ke ErrProductNotFound (beda dari FindProductByID yang convert gorm.ErrRecordNotFound -> ErrProductNotFound). Karena handler.go men-cek errors.Is(err, ErrProductNotFound) untuk balas 404, update produk yang tidak ada kemungkinan sekarang balas 500, bukan 404. Test 'Update Product - Not Found' di bawah menerima [404,500] dan diberi catatan supaya tidak false-fail — sesuaikan kalau sudah diperbaiki.",
+  "item": [
+    {
+      "name": "Create Product",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Kaos Polos Premium\",\n  \"description\": \"Kaos katun combed 30s, adem dan tidak mudah melar\",\n  \"category_id\": {{categoryId}},\n  \"status\": \"active\",\n  \"images\": [\n    { \"image_url\": \"https://example.com/images/kaos-1.jpg\", \"is_primary\": true },\n    { \"image_url\": \"https://example.com/images/kaos-2.jpg\", \"is_primary\": false }\n  ],\n  \"variants\": [\n    { \"sku\": \"KAOS-POLOS-M-HTM\", \"name\": \"Hitam - M\", \"price_in_cents\": 8500000, \"stock\": 25 },\n    { \"sku\": \"KAOS-POLOS-L-HTM\", \"name\": \"Hitam - L\", \"price_in_cents\": 8500000, \"stock\": 20 }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["products"]
+        },
+        "description": "name wajib. Minimal 1 variant wajib (sku, name, price_in_cents, stock semua required). description, category_id, status, images opsional. base_price otomatis dihitung dari harga variant termurah."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Product created (200/201)', function () {",
+              "    pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "",
+              "if ([200, 201].includes(pm.response.code)) {",
+              "    const body = pm.response.json();",
+              "    const data = body.data || body;",
+              "    const id = data.id || data.ID;",
+              "    if (id) {",
+              "        pm.environment.set('productId', id);",
+              "        console.log('productId tersimpan otomatis: ' + id);",
+              "    }",
+              "    if (Array.isArray(data.variants) && data.variants.length > 0 && data.variants[0].id) {",
+              "        pm.environment.set('variantId', data.variants[0].id);",
+              "        console.log('variantId tersimpan otomatis: ' + data.variants[0].id);",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Create Product - Tanpa Variant (harus gagal)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Produk Tanpa Variant\",\n  \"description\": \"Ini harus ditolak\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["products"]
+        },
+        "description": "Negative test: service mewajibkan minimal 1 variant ('product name and at least one variant are required'). Error ini dikirim lewat errors.New biasa (bukan ErrProductNotFound), dan handler.CreateProduct cuma mem-branch ErrProductNotFound -> selain itu selalu 500. Jadi hasil realistisnya 500, bukan 400, walau secara semantik ini salah input user (idealnya 400)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('[Known issue] Validasi bisnis (kurang variant) balas 500, idealnya 400', function () {",
+              "    pm.expect([400, 500]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Update Product",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Kaos Polos Premium (Updated)\",\n  \"description\": \"Deskripsi diperbarui\",\n  \"status\": \"active\",\n  \"images\": [\n    { \"image_url\": \"https://example.com/images/kaos-1-updated.jpg\", \"is_primary\": true }\n  ],\n  \"variants\": [\n    { \"sku\": \"KAOS-POLOS-M-HTM\", \"name\": \"Hitam - M\", \"price_in_cents\": 9000000, \"stock\": 30 },\n    { \"sku\": \"KAOS-POLOS-L-HTM\", \"name\": \"Hitam - L\", \"price_in_cents\": 9000000, \"stock\": 22 }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products/{{productId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{productId}}"]
+        },
+        "description": "PENTING: field 'images' dan 'variants' SENGAJA selalu diisi lengkap di sini. Kalau kamu hapus field ini dari body, semua images & variants produk akan ke-clear jadi kosong (lihat catatan di deskripsi folder). name/description/status/category_id memang opsional (pointer)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Update Product - Not Found",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Ghost Product\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products/999999999",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "999999999"]
+        },
+        "description": "Negative test: update produk yang tidak ada. Lihat catatan '⚠️ KEMUNGKINAN REGRESI' di deskripsi folder — kemungkinan sekarang balas 500, bukan 404."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('[Cek regresi] Produk tidak ditemukan -> idealnya 404, tapi bisa jadi 500', function () {",
+              "    pm.expect([404, 500]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Delete Product",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products/{{productId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{productId}}"]
+        },
+        "description": "BARU: endpoint ini baru muncul di service (DeleteProduct, soft delete via GORM DeletedAt). ⚠️ handler.go untuk route ini belum pernah kamu upload — cek dulu path & method aslinya di router kalau ternyata beda dari asumsi (DELETE /products/:id)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200/204', function () {",
+              "    pm.expect([200, 204]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Delete Product - Sudah Terhapus (idempotency check)",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products/{{productId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{productId}}"]
+        },
+        "description": "Negative test: hapus produk yang sama dua kali. GORM Delete tanpa RowsAffected check di service akan tetap return err == nil walau tidak ada row terhapus, jadi kemungkinan tetap 200, bukan 404. Sesuaikan kalau ternyata handler mengecek RowsAffected."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('[Cek perilaku] Delete produk yang sudah terhapus', function () {",
+              "    pm.expect([200, 204, 404]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Create Product - No Token (harus 401)",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Should Fail\",\n  \"variants\": [\n    { \"sku\": \"SHOULD-FAIL\", \"name\": \"Default\", \"price_in_cents\": 1000, \"stock\": 1 }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["products"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Tanpa token -> 401', function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

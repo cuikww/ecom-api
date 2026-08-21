@@ -3,18 +3,19 @@ package orders
 import "time"
 
 type OrderItemRequest struct {
-	ProductID int64 `json:"productId" binding:"required"`
+	VariantID int64 `json:"variantId" binding:"required"`
 	Quantity  int32 `json:"quantity" binding:"required,min=1"`
 }
 
 type CreateOrderRequest struct {
-	CustomerID int64              `json:"customerId"`
+	CustomerID int64              `json:"customerId" binding:"required"`
 	Items      []OrderItemRequest `json:"items" binding:"required,min=1,dive"`
 }
 
 type OrderItemDetail struct {
-	ProductID    int64  `json:"productId"`
-	ProductName  string `json:"productName"`
+	VariantID    int64  `json:"variantId"`
+	SKU          string `json:"sku"`
+	VariantName  string `json:"variantName"`
 	Quantity     int32  `json:"quantity"`
 	PriceInCents int32  `json:"priceInCents"`
 }

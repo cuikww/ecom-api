@@ -93,12 +93,12 @@ func (rt *Router) Register(r *gin.Engine) {
 	)
 
 	// Products
-	protected.GET(
+	r.GET(
 		"/products",
 		rt.productHandler.ListProducts,
 	)
 
-	protected.GET(
+	r.GET(
 		"/products/:id",
 		rt.productHandler.FindProductsByID,
 	)
@@ -115,6 +115,9 @@ func (rt *Router) Register(r *gin.Engine) {
 		"/products/:id",
 		rt.productHandler.UpdateProduct,
 	)
+
+	adminRoutes.DELETE(
+		"/products/:id", rt.productHandler.DeleteProduct)
 
 	// Orders
 	adminRoutes.GET(

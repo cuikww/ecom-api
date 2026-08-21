@@ -35,6 +35,17 @@
               "        const first = data[0];",
               "        const id = first.id || first.ID;",
               "        if (id) pm.environment.set('productId', id);",
+              "",
+              "        // Order sekarang pakai variantId (bukan productId lagi), ambil varian pertama",
+              "        if (Array.isArray(first.variants) && first.variants.length > 0) {",
+              "            const variant = first.variants[0];",
+              "            if (variant.id) {",
+              "                pm.environment.set('variantId', variant.id);",
+              "                console.log('variantId tersimpan otomatis: ' + variant.id);",
+              "            }",
+              "        }",
+              "",
+              "        if (first.category_id) pm.environment.set('categoryId', first.category_id);",
               "    }",
               "}"
             ]

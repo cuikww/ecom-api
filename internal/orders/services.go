@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	ErrorProductNotFound = errors.New("product not found")
-	ErrorProductNoStock  = errors.New("product no stock")
+	ErrorVariantNotFound = errors.New("product variant not found")
+	ErrorProductNoStock  = errors.New("product variant out of stock")
 	ErrorOrderNotFound   = errors.New("order not found")
+	ErrorProductNotFound = errors.New("product not found")
 )
 
 type Service interface {
@@ -71,43 +72,48 @@ func (s *service) PlaceOrder(ctx context.Context, req CreateOrderRequest) (Order
 			return err
 		}
 
-		productIDs := make([]int64, len(req.Items))
-		qtyByProduct := make(map[int64]int32, len(req.Items))
+		variantIDs := make([]int64, len(req.Items))
+		qtyByVariant := make(map[int64]int32, len(req.Items))
 		for i, item := range req.Items {
-			productIDs[i] = item.ProductID
-			qtyByProduct[item.ProductID] = item.Quantity
+			variantIDs[i] = item.VariantID
+			qtyByVariant[item.VariantID] = item.Quantity
 		}
 
-		var lockedProducts []products.Product
+		var lockedVariants []products.ProductVariant
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("id IN ?", productIDs).
-			Find(&lockedProducts).Error
+			Preload("Product"). // <-- Ambil data produk induk
+			Where("id IN ?", variantIDs).
+			Find(&lockedVariants).Error
 		if err != nil {
 			return err
 		}
-		if len(lockedProducts) != len(productIDs) {
-			return ErrorProductNotFound
+		if len(lockedVariants) != len(variantIDs) {
+			return ErrorVariantNotFound
 		}
 
-		items := make([]OrderItem, 0, len(lockedProducts))
-		for _, p := range lockedProducts {
-			qty := qtyByProduct[p.ID]
-			if p.Quantity < qty {
+		items := make([]OrderItem, 0, len(lockedVariants))
+		for _, v := range lockedVariants {
+			qty := qtyByVariant[v.ID]
+			if v.Stock < qty {
 				return ErrorProductNoStock
 			}
 
 			items = append(items, OrderItem{
 				OrderID:      order.ID,
-				ProductID:    p.ID,
-				ProductName:  p.Name,
+				ProductID:    v.ProductID,
+				ProductName:  v.Product.Name, // <-- Masukkan nama produk di sini
+				VariantID:    v.ID,
+				VariantName:  v.Name,
+				SKU:          v.SKU,
 				Quantity:     qty,
-				PriceInCents: p.PriceInCents,
-				Product:      p,
+				PriceInCents: v.PriceInCents,
+				Variant:      v,
 			})
 
-			res := tx.Model(&products.Product{}).
-				Where("id = ? AND quantity >= ?", p.ID, qty).
-				UpdateColumn("quantity", gorm.Expr("quantity - ?", qty))
+			// Kurangi stok di tabel product_variants secara aman
+			res := tx.Model(&products.ProductVariant{}).
+				Where("id = ? AND stock >= ?", v.ID, qty).
+				UpdateColumn("stock", gorm.Expr("stock - ?", qty))
 			if res.Error != nil {
 				return res.Error
 			}
@@ -194,12 +200,14 @@ func (s *service) fetchOrdersFromCacheOrDB(ctx context.Context, cacheKey string,
 
 	return result, nil
 }
+
 func toOrderResponse(o Order) OrderResponse {
 	items := make([]OrderItemDetail, 0, len(o.Items))
 	for _, item := range o.Items {
 		items = append(items, OrderItemDetail{
-			ProductID:    item.ProductID,
-			ProductName:  item.ProductName,
+			VariantID:    item.VariantID,
+			SKU:          item.SKU,
+			VariantName:  item.VariantName,
 			Quantity:     item.Quantity,
 			PriceInCents: item.PriceInCents,
 		})
@@ -207,6 +215,7 @@ func toOrderResponse(o Order) OrderResponse {
 	return OrderResponse{
 		OrderID:    o.ID,
 		CustomerID: o.CustomerID,
+		Status:     o.Status,
 		CreatedAt:  o.CreatedAt,
 		Items:      items,
 	}

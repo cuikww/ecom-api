@@ -17,9 +17,7 @@ type Handler struct {
 }
 
 func NewHandler(service Service) *Handler {
-	return &Handler{
-		service: service,
-	}
+	return &Handler{service: service}
 }
 
 func (h *Handler) ListProducts(c *gin.Context) {
@@ -42,14 +40,12 @@ func (h *Handler) FindProductsByID(c *gin.Context) {
 		return
 	}
 
-	product, err := h.service.FindProductsByID(c.Request.Context(), id)
+	product, err := h.service.FindProductByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrProductNotFound) {
 			response.Error(c, http.StatusNotFound, response.ErrNotFound, "Produk tidak ditemukan")
 			return
 		}
-
-		slog.Error("FindProductsByID gagal", slog.Int64("product_id", id), slog.String("error", err.Error()))
 		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Gagal mengambil data produk")
 		return
 	}
@@ -67,7 +63,7 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 	product, err := h.service.CreateProduct(c.Request.Context(), params)
 	if err != nil {
 		slog.Error("CreateProduct gagal", slog.String("error", err.Error()))
-		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Gagal menambahkan produk baru")
+		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Gagal menambahkan produk baru: "+err.Error())
 		return
 	}
 
@@ -86,20 +82,29 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, response.ErrInvalidRequest, "Format data yang diperbarui tidak valid")
 		return
 	}
-
 	params.ID = id
 
 	product, err := h.service.UpdateProduct(c.Request.Context(), params)
 	if err != nil {
-		if errors.Is(err, ErrProductNotFound) {
-			response.Error(c, http.StatusNotFound, response.ErrNotFound, "Produk yang ingin diperbarui tidak ditemukan")
-			return
-		}
-
-		slog.Error("UpdateProduct gagal", slog.Int64("product_id", id), slog.String("error", err.Error()))
 		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Gagal memperbarui data produk")
 		return
 	}
 
 	response.Success(c, http.StatusOK, product, nil)
+}
+
+func (h *Handler) DeleteProduct(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrInvalidRequest, "Format ID Produk tidak valid")
+		return
+	}
+
+	err = h.service.DeleteProduct(c.Request.Context(), id)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, response.ErrInternalServer, "Gagal menghapus produk")
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{"message": "Produk berhasil dihapus"}, nil)
 }

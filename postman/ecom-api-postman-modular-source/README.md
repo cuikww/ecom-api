@@ -100,6 +100,26 @@ npm run watch
 ```
 Akan otomatis rebuild tiap ada perubahan file di `collection/`.
 
+## Changelog terakhir (Products & Orders di-refactor jadi Category/Variant)
+
+Kode `products` dan `orders` berubah struktur (harga & stok pindah ke level **variant**, produk sekarang punya Category/Images/Variants). Yang di-update di collection ini:
+
+- **Public > Products (Read) > List Products**: sekarang juga meng-ekstrak `variantId` (dari `variants[0].id`) dan `categoryId`, bukan cuma `productId` — karena order butuh `variantId`.
+- **Admin > Products (Manage)**: body Create/Update Product ditulis ulang total mengikuti `ProductParams` baru (`name`, `description`, `category_id`, `status`, `images[]`, `variants[]`). Ditambah request baru **Delete Product** (endpoint `DeleteProduct` baru muncul di service) + test idempotency.
+- **Customer > Orders**: body `Place Order` sekarang pakai `variantId` (bukan `productId`), dan **wajib** menyertakan `customerId` di body (di-overwrite server, tapi lolos validasi `binding:"required"` butuh nilai != 0) — dipakai `{{customerId}}` otomatis.
+- Environment: tambah variable `variantId` dan `categoryId` (default `1`, **asumsi** kategori dengan id 1 sudah ada di DB — sesuaikan kalau beda).
+
+### ⚠️ Kemungkinan regresi yang saya temukan (bukan saya perbaiki, cuma ditandai di test)
+Karena `handler.go`/`handlers.go` **tidak** ikut di-upload ulang saat kode service berubah, ada 2 kemungkinan mismatch antara handler lama dan service baru — saya tandai di collection dengan test yang menerima 2 kemungkinan status code + komentar `[Known issue]` / `[Cek regresi]`, supaya test tidak false-fail sampai kamu konfirmasi:
+
+1. **UpdateProduct produk tidak ditemukan**: service sekarang tidak lagi convert `gorm.ErrRecordNotFound` → `ErrProductNotFound` di path Update (beda dari `FindProductByID` yang masih convert). Kalau handler masih cek `errors.Is(err, ErrProductNotFound)`, response yang tadinya 404 kemungkinan sekarang jadi 500.
+2. **PlaceOrder variant tidak ditemukan**: service sekarang return `ErrorVariantNotFound` (bukan `ErrorProductNotFound` lagi). Kalau handler order masih cek `errors.Is(err, ErrorProductNotFound)`, response yang tadinya 404 kemungkinan sekarang jadi 500.
+
+Begitu kamu re-upload `handler.go`/`handlers.go` versi terbaru, kabari saya — saya sesuaikan test-nya jadi strict lagi (cuma satu status code, tidak dua kemungkinan).
+
+### ⚠️ Gotcha: Update Product bisa menghapus images/variants tanpa sengaja
+Di `UpdateProduct`, `Association('Images').Clear()` dan `Association('Variants').Clear()` **selalu** jalan duluan sebelum diisi ulang dari body request. Kalau kamu PATCH tanpa field `images`/`variants`, semua images & variants produk itu akan **hilang** (bukan dibiarkan). Karena itu request `Update Product` di collection ini sengaja selalu mengirim `images` & `variants` lengkap — jangan dihapus manual kecuali kamu memang mau mengosongkannya.
+
 ## Catatan penting / asumsi
 
 Karena file router (yang mendaftarkan path final + middleware auth per-role) tidak ikut diupload, beberapa hal di collection ini **asumsi** berdasarkan kode handler yang ada — silakan sesuaikan bagian `url` di file terkait kalau path aslinya beda:

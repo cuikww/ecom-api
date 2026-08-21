@@ -11,16 +11,16 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 var ErrProductNotFound = errors.New("product not found")
 
 type Service interface {
 	ListProducts(ctx context.Context, p utils.Pagination) ([]Product, error)
-	FindProductsByID(ctx context.Context, id int64) (Product, error)
+	FindProductByID(ctx context.Context, id int64) (Product, error)
 	CreateProduct(ctx context.Context, p ProductParams) (Product, error)
 	UpdateProduct(ctx context.Context, p ProductParams) (Product, error)
+	DeleteProduct(ctx context.Context, id int64) error
 }
 
 type service struct {
@@ -37,16 +37,18 @@ func (s *service) ListProducts(ctx context.Context, p utils.Pagination) ([]Produ
 	cacheKey := fmt.Sprintf("products:page:%d:limit:%d", p.Page, p.Limit)
 	var products []Product
 
-	cachedData, err := s.redis.Get(ctx, cacheKey).Result()
-	if err == nil {
+	if cachedData, err := s.redis.Get(ctx, cacheKey).Result(); err == nil {
 		if err := json.Unmarshal([]byte(cachedData), &products); err == nil {
 			return products, nil
 		}
 	}
 
-	err = s.db.WithContext(ctx).
+	err := s.db.WithContext(ctx).
 		Scopes(utils.Paginate(p)).
-		Order("id ASC").
+		Preload("Category").
+		Preload("Images").
+		Preload("Variants").
+		Order("id DESC").
 		Find(&products).Error
 
 	if err != nil {
@@ -60,20 +62,22 @@ func (s *service) ListProducts(ctx context.Context, p utils.Pagination) ([]Produ
 	return products, nil
 }
 
-func (s *service) FindProductsByID(ctx context.Context, id int64) (Product, error) {
+func (s *service) FindProductByID(ctx context.Context, id int64) (Product, error) {
 	cacheKey := fmt.Sprintf("product:%d", id)
 	var product Product
 
-	cachedData, err := s.redis.Get(ctx, cacheKey).Result()
-	if err == nil {
+	if cachedData, err := s.redis.Get(ctx, cacheKey).Result(); err == nil {
 		if err := json.Unmarshal([]byte(cachedData), &product); err == nil {
 			return product, nil
 		}
-	} else if err != redis.Nil {
-		fmt.Printf("redis error: %v\n", err)
 	}
 
-	err = s.db.WithContext(ctx).First(&product, id).Error
+	err := s.db.WithContext(ctx).
+		Preload("Category").
+		Preload("Images").
+		Preload("Variants").
+		First(&product, id).Error
+
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return Product{}, ErrProductNotFound
 	} else if err != nil {
@@ -88,63 +92,161 @@ func (s *service) FindProductsByID(ctx context.Context, id int64) (Product, erro
 }
 
 func (s *service) CreateProduct(ctx context.Context, p ProductParams) (Product, error) {
-	if p.ProductName == nil || p.PriceInCents == nil || p.Quantity == nil {
-		return Product{}, errors.New("product_name, price_in_cents, and quantity are required")
+	if p.Name == nil || len(p.Variants) == 0 {
+		return Product{}, errors.New("product name and at least one variant are required")
 	}
 
-	product := Product{
-		Name:         *p.ProductName,
-		PriceInCents: *p.PriceInCents,
-		Quantity:     *p.Quantity,
+	var basePrice int32 = p.Variants[0].PriceInCents
+	for _, v := range p.Variants {
+		if v.PriceInCents < basePrice {
+			basePrice = v.PriceInCents
+		}
 	}
-	err := s.db.WithContext(ctx).Create(&product).Error
+
+	var newProduct Product
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		status := "active"
+		if p.Status != nil {
+			status = *p.Status
+		}
+
+		desc := ""
+		if p.Description != nil {
+			desc = *p.Description
+		}
+
+		product := Product{
+			Name:        *p.Name,
+			Description: desc,
+			BasePrice:   basePrice,
+			CategoryID:  p.CategoryID,
+			Status:      status,
+		}
+
+		if err := tx.Create(&product).Error; err != nil {
+			return err
+		}
+
+		for _, imgParam := range p.Images {
+			img := ProductImage{
+				ProductID: product.ID,
+				ImageURL:  imgParam.ImageURL,
+				IsPrimary: imgParam.IsPrimary,
+			}
+			if err := tx.Create(&img).Error; err != nil {
+				return err
+			}
+		}
+
+		for _, varParam := range p.Variants {
+			variant := ProductVariant{
+				ProductID:    product.ID,
+				SKU:          varParam.SKU,
+				Name:         varParam.Name,
+				PriceInCents: varParam.PriceInCents,
+				Stock:        varParam.Stock,
+			}
+			if err := tx.Create(&variant).Error; err != nil {
+				return err
+			}
+		}
+
+		tx.Preload("Category").Preload("Images").Preload("Variants").First(&newProduct, product.ID)
+		return nil
+	})
+
 	if err != nil {
 		return Product{}, err
 	}
 
+	s.invalidateCache()
+	return newProduct, nil
+}
+
+func (s *service) UpdateProduct(ctx context.Context, p ProductParams) (Product, error) {
+	var updatedProduct Product
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var product Product
+		if err := tx.First(&product, p.ID).Error; err != nil {
+			return err
+		}
+
+		if p.Name != nil {
+			product.Name = *p.Name
+		}
+		if p.Description != nil {
+			product.Description = *p.Description
+		}
+		if p.CategoryID != nil {
+			product.CategoryID = p.CategoryID
+		}
+		if p.Status != nil {
+			product.Status = *p.Status
+		}
+
+		tx.Model(&product).Association("Images").Clear()
+		tx.Model(&product).Association("Variants").Clear()
+
+		var newImages []ProductImage
+		for _, img := range p.Images {
+			newImages = append(newImages, ProductImage{ImageURL: img.ImageURL, IsPrimary: img.IsPrimary})
+		}
+		product.Images = newImages
+
+		var newVariants []ProductVariant
+		for _, v := range p.Variants {
+			newVariants = append(newVariants, ProductVariant{
+				SKU: v.SKU, Name: v.Name, PriceInCents: v.PriceInCents, Stock: v.Stock,
+			})
+		}
+		product.Variants = newVariants
+
+		if len(newVariants) > 0 {
+			basePrice := newVariants[0].PriceInCents
+			for _, v := range newVariants {
+				if v.PriceInCents < basePrice {
+					basePrice = v.PriceInCents
+				}
+			}
+			product.BasePrice = basePrice
+		}
+
+		if err := tx.Save(&product).Error; err != nil {
+			return err
+		}
+
+		tx.Preload("Category").Preload("Images").Preload("Variants").First(&updatedProduct, product.ID)
+		return nil
+	})
+
+	if err != nil {
+		return Product{}, err
+	}
+
+	s.invalidateCacheSpecific(p.ID)
+	return updatedProduct, nil
+}
+
+func (s *service) DeleteProduct(ctx context.Context, id int64) error {
+	err := s.db.WithContext(ctx).Delete(&Product{}, id).Error
+	if err == nil {
+		s.invalidateCacheSpecific(id)
+	}
+	return err
+}
+
+func (s *service) invalidateCache() {
 	s.workerPool.Enqueue(func(bgCtx context.Context) error {
 		s.redis.Del(bgCtx, "products:all")
 		return nil
 	})
-
-	return product, nil
 }
 
-func (s *service) UpdateProduct(ctx context.Context, p ProductParams) (Product, error) {
-	updates := map[string]interface{}{}
-	if p.ProductName != nil {
-		updates["name"] = *p.ProductName
-	}
-	if p.PriceInCents != nil {
-		updates["price_in_cents"] = *p.PriceInCents
-	}
-	if p.Quantity != nil {
-		updates["quantity"] = *p.Quantity
-	}
-	if len(updates) == 0 {
-		return Product{}, errors.New("no fields to update")
-	}
-
-	var product Product
-	err := s.db.WithContext(ctx).
-		Clauses(clause.Returning{}).
-		Model(&product).
-		Where("id = ?", p.ID).
-		Updates(updates).Error
-
-	if err != nil {
-		return Product{}, err
-	}
-	if product.ID == 0 {
-		return Product{}, ErrProductNotFound
-	}
-
+func (s *service) invalidateCacheSpecific(id int64) {
 	s.workerPool.Enqueue(func(bgCtx context.Context) error {
-		cacheKeySpecific := fmt.Sprintf("product:%d", p.ID)
-		cacheKeyAll := "products:all"
-		s.redis.Del(bgCtx, cacheKeySpecific, cacheKeyAll)
+		s.redis.Del(bgCtx, fmt.Sprintf("product:%d", id), "products:all")
 		return nil
 	})
-
-	return product, nil
 }

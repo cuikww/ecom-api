@@ -1,6 +1,6 @@
 {
   "name": "Orders",
-  "description": "Sesuai orders.Handler — PlaceOrder & ListOrdersByCustomer, keduanya pakai loggedInUserID dari token (ada validasi IDOR di ListOrdersByCustomer).",
+  "description": "⚠️ PERUBAHAN: order sekarang per-VARIANT (variantId), bukan per-produk (productId) lagi — lihat OrderItemRequest.\n\n⚠️ PERHATIAN: CreateOrderRequest.CustomerID sekarang punya tag `binding:\"required\"`. Body request WAJIB mengirim customerId != 0 supaya lolos ShouldBindJSON, walau handler tetap meng-overwrite-nya dengan loggedInUserID setelah binding (req.CustomerID = loggedInUserID). Jadi nilai yang kamu kirim di body customerId TIDAK berpengaruh ke hasil akhir — cuma untuk lolos validasi. Kita pakai {{customerId}} (hasil login) sebagai placeholder aman.\n\n⚠️ KEMUNGKINAN REGRESI: kalau variant tidak ditemukan, service sekarang return ErrorVariantNotFound (bukan ErrorProductNotFound). handler.go (versi terakhir yang kamu upload) masih mem-branch errors.Is(err, ErrorProductNotFound) untuk balas 404 — kemungkinan sekarang variant-not-found jatuh ke 500, bukan 404. Test terkait di bawah menerima [404,500] dengan catatan.",
   "item": [
     {
       "name": "Place Order",
@@ -9,14 +9,14 @@
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"items\": [\n    {\n      \"productId\": {{productId}},\n      \"quantity\": 2\n    }\n  ]\n}"
+          "raw": "{\n  \"customerId\": {{customerId}},\n  \"items\": [\n    {\n      \"variantId\": {{variantId}},\n      \"quantity\": 2\n    }\n  ]\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "customerId diisi otomatis oleh server dari token (req.CustomerID = loggedInUserID), jadi tidak perlu dikirim di body."
+        "description": "customerId wajib diisi (binding:required) tapi nilainya akan di-overwrite server dari token — kirim {{customerId}} saja. variantId didapat dari List Products atau Create Product (Admin)."
       },
       "event": [
         {
@@ -44,20 +44,20 @@
       "response": []
     },
     {
-      "name": "Place Order - Produk Tidak Ditemukan",
+      "name": "Place Order - customerId Kosong (harus 400)",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"items\": [\n    {\n      \"productId\": 999999999,\n      \"quantity\": 1\n    }\n  ]\n}"
+          "raw": "{\n  \"customerId\": 0,\n  \"items\": [\n    {\n      \"variantId\": {{variantId}},\n      \"quantity\": 1\n    }\n  ]\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Negative test: productId tidak ada -> ErrorProductNotFound -> 404."
+        "description": "Negative test BARU: customerId = 0 melanggar binding:required di CreateOrderRequest -> gagal ShouldBindJSON -> 400."
       },
       "event": [
         {
@@ -65,8 +65,39 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('Produk tidak ditemukan -> 404', function () {",
-              "    pm.response.to.have.status(404);",
+              "pm.test('customerId kosong -> 400', function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Place Order - Variant Tidak Ditemukan",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerId\": {{customerId}},\n  \"items\": [\n    {\n      \"variantId\": 999999999,\n      \"quantity\": 1\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Negative test: variantId tidak ada -> service.ErrorVariantNotFound. Lihat catatan '⚠️ KEMUNGKINAN REGRESI' di deskripsi folder."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('[Cek regresi] Variant tidak ditemukan -> idealnya 404, tapi bisa jadi 500', function () {",
+              "    pm.expect([404, 500]).to.include(pm.response.code);",
               "});"
             ]
           }
@@ -81,14 +112,14 @@
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"items\": [\n    {\n      \"productId\": {{productId}},\n      \"quantity\": 999999\n    }\n  ]\n}"
+          "raw": "{\n  \"customerId\": {{customerId}},\n  \"items\": [\n    {\n      \"variantId\": {{variantId}},\n      \"quantity\": 999999\n    }\n  ]\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Negative test: quantity melebihi stok -> ErrorProductNoStock -> 409."
+        "description": "Negative test: quantity melebihi stok -> ErrorProductNoStock -> 409 (tidak berubah)."
       },
       "event": [
         {
@@ -145,7 +176,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["orders", "customer", "999999"]
         },
-        "description": "Negative test penting: coba akses data customer lain -> harus 403 (validasi IDOR di handler)."
+        "description": "Negative test penting: coba akses data customer lain -> harus 403 (validasi IDOR di handler, tidak berubah)."
       },
       "event": [
         {

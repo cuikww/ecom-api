@@ -43,7 +43,10 @@ func Run() error {
 
 	err = db.AutoMigrate(
 		&users.User{},
-		&products.Product{},
+		&products.Category{},       // Tambahkan ini
+		&products.Product{},        // Model Product yang sudah diperbarui
+		&products.ProductImage{},   // Tambahkan ini
+		&products.ProductVariant{}, // Tambahkan ini
 		&orders.Order{},
 		&orders.OrderItem{},
 	)
